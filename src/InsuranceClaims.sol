@@ -2,12 +2,8 @@
 pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 
 contract InsuranceClaims is Ownable {
-    using Counters for Counters.Counter;
-    Counters.Counter private _claimIds;
-
     enum ClaimStatus { Submitted, Approved, Rejected }
 
     struct Claim {
@@ -28,6 +24,8 @@ contract InsuranceClaims is Ownable {
 
     constructor() Ownable(msg.sender) {}
 
+    uint256 public nextClaimId = 1;
+
     /**
      * @dev Submits a new insurance claim
      * @param customerId Raw customer ID that will be hashed
@@ -40,8 +38,7 @@ contract InsuranceClaims is Ownable {
         require(amount > 0, "Amount must be greater than 0");
         
         bytes32 customerIdHash = keccak256(abi.encodePacked(customerId));
-        _claimIds.increment();
-        uint256 newClaimId = _claimIds.current();
+        uint256 newClaimId = nextClaimId++;
 
         claims[newClaimId] = Claim({
             customerIdHash: customerIdHash,
