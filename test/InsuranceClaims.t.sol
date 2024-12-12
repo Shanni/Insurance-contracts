@@ -160,6 +160,100 @@ contract InsuranceClaimsTest is Test {
         insuranceClaims.updateClaimStatus(claimId, InsuranceClaims.ClaimStatus.Approved);
     }
 
+    function testClaimStructure() public {
+        // Submit a claim and get its ID
+        vm.prank(user);
+        uint256 claimId = insuranceClaims.submitClaim("USER123", 1.5 ether);
+
+        // Get the claim from mapping
+        (
+            bytes32 customerIdHash,
+            uint256 amount,
+            uint256 claimDate,
+            InsuranceClaims.ClaimStatus status
+        ) = insuranceClaims.getClaim(claimId);
+
+        // Test each field of the struct
+        bytes32 expectedHash = keccak256(abi.encodePacked("USER123"));
+        assertEq(customerIdHash, expectedHash, "Customer ID hash mismatch");
+        assertEq(amount, 1.5 ether, "Amount mismatch");
+        assertEq(status, InsuranceClaims.ClaimStatus.Submitted, "Initial status should be Submitted");
+        
+        // Test claim date is recent
+        assertGt(claimDate, block.timestamp - 1 minutes, "Claim date too old");
+        assertLe(claimDate, block.timestamp, "Claim date in future");
+
+        // Test claim existence
+        (bool exists) = insuranceClaims.claims(claimId);
+        assertTrue(exists, "Claim should exist");
+
+        // Test non-existent claim
+        vm.expectRevert(InsuranceClaims__ClaimNotFound.selector);
+        insuranceClaims.getClaim(999);
+
+        // Test claim ID sequence
+        vm.prank(user);
+        uint256 secondClaimId = insuranceClaims.submitClaim("USER456", 2 ether);
+        assertEq(secondClaimId, claimId + 1, "Claim IDs should be sequential");
+
+        // Test different customer IDs produce different hashes
+        (bytes32 secondCustomerIdHash, , , ) = insuranceClaims.getClaim(secondClaimId);
+        assertTrue(customerIdHash != secondCustomerIdHash, "Different customers should have different hashes");
+    }
+
+    function testClaimStatusTransitions() public {
+        // Submit a claim
+        vm.prank(user);
+        uint256 claimId = insuranceClaims.submitClaim("USER123", 1 ether);
+
+        // Test initial status
+        (, , , InsuranceClaims.ClaimStatus status) = insuranceClaims.getClaim(claimId);
+        assertEq(uint(status), uint(InsuranceClaims.ClaimStatus.Submitted), "Initial status should be Submitted");
+
+        // Test transition to Approved
+        vm.prank(owner);
+        insuranceClaims.updateClaimStatus(claimId, InsuranceClaims.ClaimStatus.Approved);
+        (, , , status) = insuranceClaims.getClaim(claimId);
+        assertEq(uint(status), uint(InsuranceClaims.ClaimStatus.Approved), "Status should be Approved");
+
+        // Test cannot transition from Approved to Submitted
+        vm.expectRevert(InsuranceClaims__StatusAlreadySet.selector);
+        vm.prank(owner);
+        insuranceClaims.updateClaimStatus(claimId, InsuranceClaims.ClaimStatus.Approved);
+
+        // Test transition to Rejected (should fail as already Approved)
+        vm.prank(owner);
+        vm.expectRevert(InsuranceClaims__StatusAlreadySet.selector);
+        insuranceClaims.updateClaimStatus(claimId, InsuranceClaims.ClaimStatus.Rejected);
+    }
+
+    function testClaimAmounts() public {
+        // Test zero amount
+        vm.prank(user);
+        vm.expectRevert(InsuranceClaims__InvalidAmount.selector);
+        insuranceClaims.submitClaim("USER123", 0);
+
+        // Test various amounts
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = 0.1 ether;
+        amounts[1] = 1 ether;
+        amounts[2] = 100 ether;
+
+        for (uint i = 0; i < amounts.length; i++) {
+            vm.prank(user);
+            uint256 claimId = insuranceClaims.submitClaim("USER123", amounts[i]);
+            
+            (, uint256 storedAmount, , ) = insuranceClaims.getClaim(claimId);
+            assertEq(storedAmount, amounts[i], "Stored amount should match submitted amount");
+        }
+
+        // Test max uint256 amount
+        vm.prank(user);
+        uint256 maxClaimId = insuranceClaims.submitClaim("USER123", type(uint256).max);
+        (, uint256 maxAmount, , ) = insuranceClaims.getClaim(maxClaimId);
+        assertEq(maxAmount, type(uint256).max, "Should handle maximum uint256 amount");
+    }
+
     // Helper function to check if a string contains a substring
     function contains(string memory what, string memory where) internal pure returns (bool) {
         bytes memory whatBytes = bytes(what);

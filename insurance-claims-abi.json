@@ -234,6 +234,43 @@
   },
   {
     "type": "event",
+    "name": "ClaimProcessed",
+    "inputs": [
+      {
+        "name": "claimId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "customerIdHash",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "status",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum InsuranceClaims.ClaimStatus"
+      },
+      {
+        "name": "processedAt",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ClaimStatusUpdated",
     "inputs": [
       {
@@ -243,10 +280,28 @@
         "internalType": "uint256"
       },
       {
+        "name": "oldStatus",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum InsuranceClaims.ClaimStatus"
+      },
+      {
         "name": "newStatus",
         "type": "uint8",
         "indexed": false,
         "internalType": "enum InsuranceClaims.ClaimStatus"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "updater",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -272,6 +327,18 @@
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "submitter",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -294,6 +361,26 @@
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "InsuranceClaims__ClaimNotFound",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsuranceClaims__InvalidAmount",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsuranceClaims__InvalidStatus",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsuranceClaims__StatusAlreadySet",
+    "inputs": []
   },
   {
     "type": "error",
