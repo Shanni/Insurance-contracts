@@ -1,9 +1,33 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+library StringUtils {
+    function uint2str(uint256 _i) internal pure returns (string memory) {
+        if (_i == 0) {
+            return "0";
+        }
+        uint256 j = _i;
+        uint256 length;
+        while (j != 0) {
+            length++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(length);
+        uint256 k = length;
+        j = _i;
+        while (j != 0) {
+            bstr[--k] = bytes1(uint8(48 + j % 10));
+            j /= 10;
+        }
+        return string(bstr);
+    }
+}
+
 contract InsuranceClaims is Ownable {
+    using StringUtils for uint256;
+    
     enum ClaimStatus { Submitted, Approved, Rejected }
 
     struct Claim {
@@ -102,5 +126,69 @@ contract InsuranceClaims is Ownable {
         require(claims[claimId].exists, "Claim does not exist");
         bytes32 customerIdHash = keccak256(abi.encodePacked(customerId));
         return claims[claimId].customerIdHash == customerIdHash;
+    }
+
+    /**
+     * @dev Generates a JSON string for a claim
+     * @param claimId ID of the claim to generate JSON for
+     */
+    function getClaimAsJSON(uint256 claimId) external view returns (string memory) {
+        require(claims[claimId].exists, "Claim does not exist");
+        Claim storage claim = claims[claimId];
+        
+        return string(abi.encodePacked(
+            '{',
+            '"claimId":', claim.claimId.uint2str(), ',',
+            '"customerIdHash":"0x', toHexString(abi.encodePacked(claim.customerIdHash)), '",',
+            '"amount":', claim.amount.uint2str(), ',',
+            '"claimDate":', claim.claimDate.uint2str(), ',',
+            '"status":"', getStatusString(claim.status), '"',
+            '}'
+        ));
+    }
+
+    /**
+     * @dev Helper function to convert status enum to string
+     */
+    function getStatusString(ClaimStatus status) internal pure returns (string memory) {
+        if (status == ClaimStatus.Submitted) return "Submitted";
+        if (status == ClaimStatus.Approved) return "Approved";
+        if (status == ClaimStatus.Rejected) return "Rejected";
+        return "Unknown";
+    }
+
+    /**
+     * @dev Helper function to convert bytes to hex string
+     */
+    function toHexString(bytes memory data) internal pure returns (string memory) {
+        bytes memory alphabet = "0123456789abcdef";
+        bytes memory str = new bytes(2 * data.length);
+        for (uint256 i = 0; i < data.length; i++) {
+            str[2 * i] = alphabet[uint8(data[i] >> 4)];
+            str[2 * i + 1] = alphabet[uint8(data[i] & 0x0f)];
+        }
+        return string(str);
+    }
+
+    /**
+     * @dev Get all claims for a customer
+     * @param customerId Customer ID to get claims for
+     */
+    function getCustomerClaimsAsJSON(string calldata customerId) external view returns (string memory) {
+        bytes32 customerIdHash = keccak256(abi.encodePacked(customerId));
+        string memory claims_array = "[";
+        bool first = true;
+
+        for (uint256 i = 1; i < nextClaimId; i++) {
+            if (claims[i].exists && claims[i].customerIdHash == customerIdHash) {
+                if (!first) {
+                    claims_array = string(abi.encodePacked(claims_array, ","));
+                }
+                claims_array = string(abi.encodePacked(claims_array, this.getClaimAsJSON(i)));
+                first = false;
+            }
+        }
+
+        return string(abi.encodePacked(claims_array, "]"));
     }
 } 

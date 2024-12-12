@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/InsuranceClaims.sol";
@@ -62,5 +62,56 @@ contract InsuranceClaimsTest is Test {
         
         // Verify incorrect ownership
         assertFalse(insuranceClaims.verifyClaimOwnership(claimId, "WRONG_USER"));
+    }
+
+    function testGetClaimAsJSON() public {
+        // Submit a claim first
+        vm.prank(user);
+        uint256 claimId = insuranceClaims.submitClaim("USER123", 1 ether);
+        
+        string memory jsonString = insuranceClaims.getClaimAsJSON(claimId);
+        assertTrue(bytes(jsonString).length > 0);
+        
+        // Basic validation that it contains expected fields
+        assertTrue(contains(jsonString, '"claimId":1'));
+        assertTrue(contains(jsonString, '"status":"Submitted"'));
+        assertTrue(contains(jsonString, '"amount":1000000000000000000')); // 1 ether in wei
+    }
+
+    function testGetCustomerClaimsAsJSON() public {
+        // Submit multiple claims
+        vm.startPrank(user);
+        insuranceClaims.submitClaim("USER123", 1 ether);
+        insuranceClaims.submitClaim("USER123", 2 ether);
+        vm.stopPrank();
+
+        string memory jsonArray = insuranceClaims.getCustomerClaimsAsJSON("USER123");
+        assertTrue(bytes(jsonArray).length > 0);
+        assertTrue(contains(jsonArray, '"claimId":1'));
+        assertTrue(contains(jsonArray, '"claimId":2'));
+    }
+
+    // Helper function to check if a string contains a substring
+    function contains(string memory what, string memory where) internal pure returns (bool) {
+        bytes memory whatBytes = bytes(what);
+        bytes memory whereBytes = bytes(where);
+
+        if (whereBytes.length > whatBytes.length) {
+            return false;
+        }
+
+        for (uint i = 0; i <= whatBytes.length - whereBytes.length; i++) {
+            bool found = true;
+            for (uint j = 0; j < whereBytes.length; j++) {
+                if (whatBytes[i + j] != whereBytes[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                return true;
+            }
+        }
+        return false;
     }
 } 
