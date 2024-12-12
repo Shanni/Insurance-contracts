@@ -25,6 +25,13 @@ library StringUtils {
     }
 }
 
+// Custom errors for better gas efficiency and clarity
+error InsuranceClaims__InvalidAmount();
+error InsuranceClaims__ClaimNotFound();
+error InsuranceClaims__StatusAlreadySet();
+error InsuranceClaims__InvalidStatus();
+error InsuranceClaims__UnauthorizedAccess();
+
 contract InsuranceClaims is Ownable {
     using StringUtils for uint256;
     
@@ -43,8 +50,29 @@ contract InsuranceClaims is Ownable {
     mapping(uint256 => Claim) public claims;
 
     // Events
-    event ClaimSubmitted(uint256 indexed claimId, bytes32 indexed customerIdHash, uint256 amount);
-    event ClaimStatusUpdated(uint256 indexed claimId, ClaimStatus newStatus);
+    event ClaimSubmitted(
+        uint256 indexed claimId,
+        bytes32 indexed customerIdHash,
+        uint256 amount,
+        uint256 timestamp,
+        address indexed submitter
+    );
+
+    event ClaimStatusUpdated(
+        uint256 indexed claimId,
+        ClaimStatus oldStatus,
+        ClaimStatus newStatus,
+        uint256 timestamp,
+        address indexed updater
+    );
+
+    event ClaimProcessed(
+        uint256 indexed claimId,
+        bytes32 indexed customerIdHash,
+        uint256 amount,
+        ClaimStatus status,
+        uint256 processedAt
+    );
 
     constructor() Ownable(msg.sender) {}
 
@@ -59,7 +87,9 @@ contract InsuranceClaims is Ownable {
         string calldata customerId,
         uint256 amount
     ) external returns (uint256) {
-        require(amount > 0, "Amount must be greater than 0");
+        if (amount == 0) {
+            revert InsuranceClaims__InvalidAmount();
+        }
         
         bytes32 customerIdHash = keccak256(abi.encodePacked(customerId));
         uint256 newClaimId = nextClaimId++;
@@ -73,7 +103,14 @@ contract InsuranceClaims is Ownable {
             exists: true
         });
 
-        emit ClaimSubmitted(newClaimId, customerIdHash, amount);
+        emit ClaimSubmitted(
+            newClaimId,
+            customerIdHash,
+            amount,
+            block.timestamp,
+            msg.sender
+        );
+
         return newClaimId;
     }
 
@@ -86,11 +123,41 @@ contract InsuranceClaims is Ownable {
         uint256 claimId,
         ClaimStatus newStatus
     ) external onlyOwner {
-        require(claims[claimId].exists, "Claim does not exist");
-        require(claims[claimId].status != newStatus, "Status already set");
+        if (!claims[claimId].exists) {
+            revert InsuranceClaims__ClaimNotFound();
+        }
 
-        claims[claimId].status = newStatus;
-        emit ClaimStatusUpdated(claimId, newStatus);
+        Claim storage claim = claims[claimId];
+        
+        if (claim.status == newStatus) {
+            revert InsuranceClaims__StatusAlreadySet();
+        }
+
+        if (uint(newStatus) > 2) {
+            revert InsuranceClaims__InvalidStatus();
+        }
+
+        ClaimStatus oldStatus = claim.status;
+        claim.status = newStatus;
+
+        emit ClaimStatusUpdated(
+            claimId,
+            oldStatus,
+            newStatus,
+            block.timestamp,
+            msg.sender
+        );
+
+        // Emit processed event when claim is finalized
+        if (newStatus == ClaimStatus.Approved || newStatus == ClaimStatus.Rejected) {
+            emit ClaimProcessed(
+                claimId,
+                claim.customerIdHash,
+                claim.amount,
+                newStatus,
+                block.timestamp
+            );
+        }
     }
 
     /**
@@ -103,9 +170,11 @@ contract InsuranceClaims is Ownable {
         uint256 claimDate,
         ClaimStatus status
     ) {
-        require(claims[claimId].exists, "Claim does not exist");
-        Claim storage claim = claims[claimId];
+        if (!claims[claimId].exists) {
+            revert InsuranceClaims__ClaimNotFound();
+        }
         
+        Claim storage claim = claims[claimId];
         return (
             claim.customerIdHash,
             claim.amount,
@@ -123,7 +192,10 @@ contract InsuranceClaims is Ownable {
         uint256 claimId,
         string calldata customerId
     ) external view returns (bool) {
-        require(claims[claimId].exists, "Claim does not exist");
+        if (!claims[claimId].exists) {
+            revert InsuranceClaims__ClaimNotFound();
+        }
+        
         bytes32 customerIdHash = keccak256(abi.encodePacked(customerId));
         return claims[claimId].customerIdHash == customerIdHash;
     }

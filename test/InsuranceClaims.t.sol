@@ -9,6 +9,31 @@ contract InsuranceClaimsTest is Test {
     address owner = address(1);
     address user = address(2);
 
+    // Events copied from InsuranceClaims contract for testing
+    event ClaimSubmitted(
+        uint256 indexed claimId,
+        bytes32 indexed customerIdHash,
+        uint256 amount,
+        uint256 timestamp,
+        address indexed submitter
+    );
+
+    event ClaimStatusUpdated(
+        uint256 indexed claimId,
+        InsuranceClaims.ClaimStatus oldStatus,
+        InsuranceClaims.ClaimStatus newStatus,
+        uint256 timestamp,
+        address indexed updater
+    );
+
+    event ClaimProcessed(
+        uint256 indexed claimId,
+        bytes32 indexed customerIdHash,
+        uint256 amount,
+        InsuranceClaims.ClaimStatus status,
+        uint256 processedAt
+    );
+
     function setUp() public {
         vm.prank(owner);
         insuranceClaims = new InsuranceClaims();
@@ -89,6 +114,50 @@ contract InsuranceClaimsTest is Test {
         assertTrue(bytes(jsonArray).length > 0);
         assertTrue(contains(jsonArray, '"claimId":1'));
         assertTrue(contains(jsonArray, '"claimId":2'));
+    }
+
+    function testCustomErrors() public {
+        // Test invalid amount
+        vm.expectRevert(InsuranceClaims__InvalidAmount.selector);
+        vm.prank(user);
+        insuranceClaims.submitClaim("USER123", 0);
+
+        // Test claim not found
+        vm.expectRevert(InsuranceClaims__ClaimNotFound.selector);
+        vm.prank(owner);
+        insuranceClaims.updateClaimStatus(999, InsuranceClaims.ClaimStatus.Approved);
+
+        // Submit a claim and test status already set
+        vm.prank(user);
+        uint256 claimId = insuranceClaims.submitClaim("USER123", 1 ether);
+        
+        vm.prank(owner);
+        insuranceClaims.updateClaimStatus(claimId, InsuranceClaims.ClaimStatus.Approved);
+        
+        vm.expectRevert(InsuranceClaims__StatusAlreadySet.selector);
+        vm.prank(owner);
+        insuranceClaims.updateClaimStatus(claimId, InsuranceClaims.ClaimStatus.Approved);
+    }
+
+    function testEventEmission() public {
+        vm.prank(user);
+        
+        // Test ClaimSubmitted event
+        vm.expectEmit(true, true, true, true);
+        emit ClaimSubmitted(1, keccak256(abi.encodePacked("USER123")), 1 ether, block.timestamp, user);
+        uint256 claimId = insuranceClaims.submitClaim("USER123", 1 ether);
+
+        // Test ClaimStatusUpdated event
+        vm.prank(owner);
+        vm.expectEmit(true, true, true, true);
+        emit ClaimStatusUpdated(
+            claimId,
+            InsuranceClaims.ClaimStatus.Submitted,
+            InsuranceClaims.ClaimStatus.Approved,
+            block.timestamp,
+            owner
+        );
+        insuranceClaims.updateClaimStatus(claimId, InsuranceClaims.ClaimStatus.Approved);
     }
 
     // Helper function to check if a string contains a substring
